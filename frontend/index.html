@@ -103,7 +103,8 @@
 
 <script>
     (async () => {
-        const socket = io('http://localhost:5000');
+        const flask_api = 'https://detection.fikki.com.ng'
+        const socket = io();
         const video = document.getElementById('video');
         const overlay = document.getElementById('overlay');
         const ctx = overlay.getContext('2d');
@@ -146,7 +147,7 @@
                 });
             } catch (err) {
                 console.error('Camera error:', err);
-                alert('Allow camera permission & use localhost/https');
+                alert('Allow camera permission and make sure you are using https');
             }
         });
 
