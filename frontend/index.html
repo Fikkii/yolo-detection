@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>3mtt July Showcase – Real-time Detection</title>
 <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
@@ -21,13 +21,11 @@
     white-space: nowrap;
     box-sizing: border-box;
   }
-
   .marquee p {
     display: inline-block;
     padding-left: 100%;
     animation: scroll-left 30s linear infinite;
   }
-
   @keyframes scroll-left {
     0%   { transform: translateX(0); }
     100% { transform: translateX(-100%); }
@@ -38,7 +36,6 @@
 
 <header class="md:absolute top-10 left-20 flex mb-5 justify-between px-2">
   <img src="/3mtt.png" width="50" alt="3mtt Logo">
-
   <!-- Toggle button for mobile -->
   <button id="toggleAbout" class="md:hidden mb-2 px-4 py-2 rounded hover:bg-cyan-700 transition">
       📦 About Project
@@ -70,9 +67,9 @@
 
         <button id="start" class="mt-8 mb-4 px-4 py-2 bg-cyan-600 rounded hover:bg-cyan-700 transition">🎥 Start Camera</button>
 
-        <div id="videoWrapper" class="relative bg-black/50 border border-white w-full max-w-md md:max-w-2xl">
-            <video id="video" class="w-full rounded shadow" autoplay muted playsinline></video>
-            <canvas id="overlay" class="absolute top-0 left-0"></canvas>
+        <div id="videoWrapper" class="relative bg-black/50 border border-white w-full max-w-full md:max-w-2xl overflow-hidden">
+            <video id="video" class="w-full h-auto rounded shadow" autoplay muted playsinline></video>
+            <canvas id="overlay" class="absolute top-0 left-0 w-full h-full"></canvas>
             <div id="fpsBadge" class="absolute top-2 left-2 bg-black/60 text-yellow-300 text-xs md:text-sm rounded px-2 py-1 font-mono max-w-[200px]">
                 <div id="fpsText">FPS: 0</div>
                 <ul id="detUl" class="mt-1 space-y-0.5 text-white list-none overflow-y-auto max-h-24"></ul>
@@ -102,97 +99,101 @@
 </div>
 
 <script>
-    (async () => {
-        const socket = io('https://3mtt.fikki.com.ng');
-        const video = document.getElementById('video');
-        const overlay = document.getElementById('overlay');
-        const ctx = overlay.getContext('2d');
-        const startBtn = document.getElementById('start');
-        const detUl = document.getElementById('detUl');
-        const fpsText = document.getElementById('fpsText');
+(async () => {
+    const socket = io('https://3mtt.fikki.com.ng'); // change if needed
+    const video = document.getElementById('video');
+    const overlay = document.getElementById('overlay');
+    const ctx = overlay.getContext('2d');
+    const startBtn = document.getElementById('start');
+    const detUl = document.getElementById('detUl');
+    const fpsText = document.getElementById('fpsText');
 
-        let captureCanvas, captureCtx;
-        let started = false;
-        let lastTime = performance.now();
+    let captureCanvas, captureCtx;
+    let started = false;
+    let lastTime = performance.now();
 
-        // Splash timeout
-        setTimeout(() => document.getElementById('splash').style.display = 'none', 3000);
+    // Splash timeout
+    setTimeout(() => document.getElementById('splash').style.display = 'none', 3000);
 
-        // Toggle About on mobile
-        document.getElementById('toggleAbout').addEventListener('click', () => {
-            const about = document.getElementById('aboutSection');
-            about.classList.toggle('hidden');
-            about.classList.toggle('flex'); // ensure flex layout when shown
-        });
+    // Toggle About on mobile
+    document.getElementById('toggleAbout').addEventListener('click', () => {
+        const about = document.getElementById('aboutSection');
+        about.classList.toggle('hidden');
+        about.classList.toggle('flex');
+    });
 
-        startBtn.addEventListener('click', async () => {
-            if (started) return;
-            started = true;
+    startBtn.addEventListener('click', async () => {
+        if (started) return;
+        started = true;
 
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-                video.srcObject = stream;
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+            video.srcObject = stream;
 
-                video.addEventListener('loadedmetadata', () => {
-                    overlay.width = video.videoWidth;
-                    overlay.height = video.videoHeight;
+            video.addEventListener('loadedmetadata', () => {
+                overlay.width = video.clientWidth;
+                overlay.height = video.clientHeight;
 
-                    captureCanvas = document.createElement('canvas');
-                    captureCanvas.width = video.videoWidth;
-                    captureCanvas.height = video.videoHeight;
-                    captureCtx = captureCanvas.getContext('2d');
+                captureCanvas = document.createElement('canvas');
+                captureCanvas.width = video.videoWidth;
+                captureCanvas.height = video.videoHeight;
+                captureCtx = captureCanvas.getContext('2d');
 
-                    sendFrame();
-                });
-            } catch (err) {
-                console.error('Camera error:', err);
-                alert('Allow camera permission & use localhost/https');
-            }
-        });
-
-        function sendFrame() {
-            captureCtx.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
-            captureCanvas.toBlob(blob => {
-                const reader = new FileReader();
-                reader.onloadend = () => {
-                    socket.emit('frame', reader.result);
-                };
-                reader.readAsDataURL(blob);
-            }, 'image/jpeg', 0.7);
-        }
-
-        socket.on('annotated', detections => {
-            const now = performance.now();
-            const fps = Math.round(1000 / (now - lastTime));
-            lastTime = now;
-            fpsText.textContent = `FPS: ${fps}`;
-
-            ctx.clearRect(0, 0, overlay.width, overlay.height);
-            detUl.innerHTML = '';
-
-            detections.forEach(det => {
-                const [x1, y1, x2, y2] = det.box;
-                ctx.strokeStyle = "rgba(34,211,238,0.9)";
-                ctx.lineWidth = 2;
-                ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
-
-                const text = `${det.class} ${(det.confidence*100).toFixed(1)}%`;
-                ctx.font = "14px monospace";
-                const textWidth = ctx.measureText(text).width;
-                const textHeight = 16;
-                ctx.fillStyle = "rgba(0,0,0,0.6)";
-                ctx.fillRect(x1, y1 - textHeight, textWidth + 6, textHeight);
-                ctx.fillStyle = "white";
-                ctx.fillText(text, x1+3, y1 - 3);
-
-                const li = document.createElement('li');
-                li.textContent = text;
-                detUl.appendChild(li);
+                sendFrame();
             });
+        } catch (err) {
+            console.error('Camera error:', err);
+            alert('Allow camera permission & use localhost/https');
+        }
+    });
 
-            sendFrame();
+    function sendFrame() {
+        captureCtx.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
+        captureCanvas.toBlob(blob => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                socket.emit('frame', reader.result);
+            };
+            reader.readAsDataURL(blob);
+        }, 'image/jpeg', 0.7);
+    }
+
+    socket.on('annotated', detections => {
+        const now = performance.now();
+        const fps = Math.round(1000 / (now - lastTime));
+        lastTime = now;
+        fpsText.textContent = `FPS: ${fps}`;
+
+        ctx.clearRect(0, 0, overlay.width, overlay.height);
+        detUl.innerHTML = '';
+
+        // scale boxes to overlay size
+        const scaleX = overlay.width / captureCanvas.width;
+        const scaleY = overlay.height / captureCanvas.height;
+
+        detections.forEach(det => {
+            const [x1, y1, x2, y2] = det.box;
+            ctx.strokeStyle = "rgba(34,211,238,0.9)";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x1*scaleX, y1*scaleY, (x2 - x1)*scaleX, (y2 - y1)*scaleY);
+
+            const text = `${det.class} ${(det.confidence*100).toFixed(1)}%`;
+            ctx.font = "14px monospace";
+            const textWidth = ctx.measureText(text).width;
+            const textHeight = 16;
+            ctx.fillStyle = "rgba(0,0,0,0.6)";
+            ctx.fillRect(x1*scaleX, y1*scaleY - textHeight, textWidth + 6, textHeight);
+            ctx.fillStyle = "white";
+            ctx.fillText(text, x1*scaleX+3, y1*scaleY - 3);
+
+            const li = document.createElement('li');
+            li.textContent = text;
+            detUl.appendChild(li);
         });
-    })();
+
+        sendFrame();
+    });
+})();
 </script>
 </body>
 </html>
