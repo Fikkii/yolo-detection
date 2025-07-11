@@ -21,7 +21,7 @@ io.on('connection', (socket) => {
 
 socket.on('frame', async (data) => {
   try {
-    const res = await axios.post('http://localhost:5001/detect', { image: data });
+    const res = await axios.post('http://18.184.154.127/detect', { image: data });
     socket.emit('annotated', res.data.detections);
   } catch (e) {
     console.error('Error:', e);
@@ -32,5 +32,5 @@ socket.on('frame', async (data) => {
   socket.on('disconnect', () => console.log('Client disconnected'));
 });
 
-server.listen(5000, () => console.log('Node.js server listening on http://localhost:5000'));
+server.listen(process.env.PORT || 5000, () => console.log('Node.js server listening on http://localhost:5000'));
 
